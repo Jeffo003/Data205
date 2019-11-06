@@ -1,0 +1,317 @@
+---
+title: "Crime Data Montgomery"
+output: html_document
+
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Part 1: Loading in Libraries 
+
+```{r}
+
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(ggrepel)
+library(leaflet)
+library(janitor)
+library(MASS)
+library(scales)
+library(ggmap)
+library(tidyverse)
+setwd("C:/Users/Jeffo/Downloads")
+crime<- read.csv('crime.csv', header=T, na.strings=c("","NA")) #read in live data from datamontgomery 
+
+
+```
+
+## Glimpse at the Crime dataset
+
+Using the glimpse function, we can see a preview of the dataset.
+
+```{r}
+glimpse(crime)
+```
+
+# Part 2: Cleaning the data
+The first part of the cleaning the Crime dataset is to convert all the values into lowercase letters. Since R programming is predominantly done in lower case, I convert the variable names to lower case to make my coding more consistent.
+```{r}
+#convert all the values into lowercase for easier reading
+proper_case <- function(x) {
+  return (gsub("\\b([A-Z])([A-Z]+)", "\\U\\1\\L\\2" , x, perl=TRUE))}
+
+  crime<- crime%>% mutate(Crime.Name3 = proper_case(Crime.Name3),
+                    Police.District.Name = proper_case(Police.District.Name),
+                    City = proper_case(City),
+                    Street.Name= proper_case(Street.Name),
+                    Street.Type= proper_case(Street.Type),
+                    Block.Address=proper_case(Block.Address))
+```
+
+## Changing the variable names
+```{r}
+crime <- crime%>%
+  clean_names()
+
+colnames(crime)[1] <- "incident_id"
+ colnames(crime)[8]<- "crime_name2"
+colnames(crime)[9]<- "crime_name3"
+
+glimpse(crime)
+```
+
+## Using the lubridate package to separate month date and year
+```{r}
+library(lubridate)
+crime<-crime%>%
+mutate(
+incident_date=mdy_hms(dispatch_date_time),  
+incident_hour=hour(incident_date),
+incident_minute=minute(incident_date),
+incident_month=month(incident_date),
+incident_second=second(incident_date),
+incident_year=year(incident_date),
+atnight=(incident_hour<6) | (incident_hour>18),
+marijuana=crime_name3==('Drugs - Marijuana - Sell'),
+burglary=crime_name2==( 'Burglary/Breaking and Entering'),
+drugs=crime_name2==('Drug/Narcotic Violations')
+)
+
+```
+
+## Creating filtererd datasets for future use
+Using the filter function, I am able to create unique datsets that I can use when I am trying to anaylze data regarding only marijuana. 
+```{r}
+
+crime_marijuana<-filter(crime, marijuana==TRUE)
+crime_burglary<-filter(crime, burglary==TRUE)
+crime_night<-filter(crime, atnight==TRUE)
+crime_day<-filter(crime, atnight==FALSE)
+crime_burglarynight<-filter(crime_night, burglary==TRUE)
+
+drugsatnight<-subset(crime_night, crime_name2 %in% c("Drug/Narcotic Violations"), drop = TRUE) 
+drugsatnight$crime_name3<- sub("-[^-]+$", "", drugsatnight$crime_name3)
+
+
+
+marijuanaatnight<-drugsatnight%>%
+  filter(str_detect(crime_name3, 'Marijuana'))
+
+generalmarijuanaatnight<-crime_night%>%
+  filter(str_detect(crime_name3, 'Marijuana'))
+
+
+```
+
+# Exploratory Data Anaylsis
+The data file contains 38 variables and 177029 rows. These variables include the city of the crime, the time of the crime, as well description of the crime. Most of the variables are factors, except for my created variables, which are logical variables. 
+```{r}
+str(crime)
+```
+
+## Looking at different Cities in the dataset
+In this dataset, there are 45 unique cities that are represented in the datset. 
+```{r}
+unique(crime$city)
+```
+
+## Looking at Missing values
+As you can see, there are a big amount of missing time data for this dataset. For this dataset, there is no way to get an average number to replace the NAs, so we will just omit them. 
+```{r}
+sum(is.na(crime$dispatch_date_time))
+```
+
+## Tally by crime type 1
+The crime I will mainly be focusing on in this project is marijuana. That is considered a crime against society. There are 49729 different occurences for crime against society. Since this is too broad, I need a more detailed type. 
+```{r}
+table(crime$crime_name1)[order(table(crime$crime_name1), decreasing = T)] # Order decreasing
+
+```
+
+## Tally by crime type 2
+For this Tally, this is slightly more specific than the first crime type. Since marijuana is considered a Drug/Narcotic Violation, there are 18216 different occurences. This still includes other drugs, so I need to narrow it down even more.
+```{r}
+table(crime$crime_name2)[order(table(crime$crime_name2), decreasing = T)] # Order decreasing
+```
+
+## Tally by crime type 3
+For this final tally, I am focusing on only 5 different crime types in crime type 3. These all include marijuana. Adding up the 5 types, I get 12648+732+332+24+15=13751 unique occurences. We can see that Possesion of marijuana is the 2nd most popular crime in MD. 
+
+```{r}
+table(crime$crime_name3)[order(table(crime$crime_name3), decreasing = T)] # Order decreasing
+
+```
+
+
+## Looking at Frequency of Months for MD Arrests
+Next I have a look at the frequency of crimes by month. But I don’t like the way the table function displays information so I will use dplyr (mentioned above), which provides nicer output and uses a far more legible syntax.
+Looking at our results, you can see that July and August are the most popular months for crimes. 
+```{r}
+group_by(.data = crime, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+
+
+
+
+## Looking at Frequency of Months for Marijuana Arrests
+Next I have a look at the frequency of marijuana crimes by month. 
+Looking at our results, you can see that July is the most popular month for Marijuana crimes. 
+```{r}
+group_by(.data = crime_marijuana, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+
+## Looking at Frequency of Months for Burglary Arrests
+Next I have a look at the frequency of burglary crimes by month.
+Looking at our results, you can see that again July and August are the most popular months. 
+```{r}
+group_by(.data = crime_burglary, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+# Visualizations 
+
+##  Bar Graph of arrests by Month
+We can see that July, August and September seem to have the most arrests in MD. 
+```{r}
+ggplot(data=crime, aes(x=incident_month))+geom_bar(aes(fill=atnight))+labs(title="Arrests in Montgomery County by Month")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+##  Bar Graph of  Burglary arrests by Month
+We can see that July, August and September seem to have the most arrests in MD. 
+```{r}
+ggplot(data=crime_burglary, aes(x=incident_month))+geom_bar(aes(fill=atnight))+labs(title="Burglary Arrests in Montgomery County by Month")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+
+
+
+##  Bar Graph of arrests by Month Percentage
+```{r}
+ggplot(data=crime, aes(x=incident_month))+geom_bar(position="fill",aes(fill=atnight))+labs(title="Arrests in Montgomery County by Month by Percentage")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+
+
+##  Bar Graph of totals arrests by Hour
+
+```{r}
+ggplot(data=subset(crime%>%filter(!is.na(drugs))
+, !is.na(incident_hour)),aes(x=incident_hour)) +geom_bar(aes(fill=drugs))+labs(title="Arrests in Montgomery County by Hour",x="Incident Hour")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="Hour")+scale_x_continuous(breaks=0:23,labels=c("0","1","2","3","4","5","6","7","8","9","10","11", "12", "13", "14", "15", "16", "17","18","19","20", "21", "22", "23"))
+
+                                                                                                                                                                              
+```
+
+##  Bar Graph of total marijuana arrests by Hour
+
+```{r}
+ggplot(data=subset(crime_marijuana, !is.na(incident_hour)),aes(x=incident_hour)) +geom_bar(fill="blue")+labs(title="Marijuana Arrests in Montgomery County by Hour")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="Hour")+scale_x_continuous(breaks=0:23,labels=c("0","1","2","3","4","5","6","7","8","9","10","11", "12", "13", "14", "15", "16", "17","18","19","20", "21", "22", "23"))
+
+                                                                                                                                                                                                                #labels=c("0","1","2","3","4","5","6","7","8","9","10","11", "12", "13", "14", "15", "16", "17","18","19","20", "21", "22", "23"))
+```
+
+## Bar graph of crimes by Agency
+The visualization I made shows which agency had the most amount of calls. Clearly, it is very obvious that MCPD was the busiest, with more than half the calls being answered by this agency.
+```{r}
+ggplot(data=crime_marijuana, aes(x=agency))+geom_bar()+labs(title="Marijuana Arrests in Montgomery County")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+## Are there more Arrests in the daytime or the night time?
+The visualization is based on arrests in the daytime vs the Night time. As shown in the graph, Daytime arrests are much more popular compared to nightime arrests. 
+
+```{r}
+P<-ggplot(data=subset(crime, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+ theme(legend.position = "none")+labs(title=" Montgomery County Crimminal Arrests in Daytime vs Nightime",x="Time of the day")+ theme(plot.title = element_text(hjust = 0.5))+ scale_x_discrete(labels=c("FALSE"="Daytime","TRUE"="Nightime"))
+
+```
+
+
+
+## Are there more Marijuana Arrests in the daytime or the night time?
+The  visualization is based on Marijuana arrests in the daytime vs the Night time. As shown in the graph, Daytime arrests are slightly more frequent than Night time arrests. 
+```{r}
+P<-ggplot(data=subset(crime_marijuana, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+ theme(legend.position = "none")+labs(title=" Montgomery County Marijuana Arrests in Daytime vs Nightime", x="Time of the day")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(labels=c("FALSE"="Daytime","TRUE"="Nightime"))
+
+```
+
+## Are there more Burglary Arrests in the daytime or the night time?
+The  visualization is based on burglary arrests in the daytime vs the Night time. As shown in the graph, Daytime arrests are slightly more frequent than Night time arrests. This is quite suprising since you would expect people to burglarize houses late at night usually. 
+
+```{r}
+P<-ggplot(data=subset(crime_burglary, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+ theme(legend.position = "none")+labs(title="Montgomery County Burglary Arrests in Daytime vs Nightime", x="Time of the day")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(labels=c("FALSE"="Daytime","TRUE"="Nightime"))
+
+```
+
+## Crime commmited by city
+```{r}
+y<-ggplot(data=subset(crime,!is.na(crime_name1)),aes(x=crime_name1, fill=city))+geom_bar()+ theme(axis.text.x = element_text(angle=60, hjust=1))
+y+labs(title="Crimes commited by City", x="Crime Type")+  scale_fill_discrete(na.translate=FALSE)
+```
+
+## Making a heat map for all drugs
+```{r} 
+crime_sub <- crime[1:100,]  # display the first 100 rows
+
+#using the stamen mapping function, create boundaries
+md_bb <- c(left = -77.55,
+            bottom = 38.92,
+            right = -76.88,
+            top = 39.36)
+
+#get the map outline
+md_stamen <- get_stamenmap(bbox = md_bb,
+                                zoom = 11)
+
+```
+
+## Create a map using ggmaps for alldrugs data
+```{r, fig.width=10,fig.height=11}
+alldrugs<-ggmap(md_stamen) +
+  geom_point(data=drugsatnight, mapping = aes(x = longitude,
+                           y = latitude, color=crime_name3),alpha=0.3)+labs(title="Heat Map for All Drugs at Nightime")+theme(plot.title = element_text(hjust = 0.5))
+alldrugs
+```
+
+## Creating a heat map for different Marijuana Offenses at night
+```{r, fig.width=10,fig.height=11}
+marijuana<-ggmap(md_stamen) +
+  geom_point(data=generalmarijuanaatnight, mapping = aes(x = longitude,
+                                          y = latitude, color=crime_name3),alpha=0.3)+labs(title="Heat Map for All Marijuana Crimes at Nightime")
+marijuana
+```
+
+## Creating a heat map for only Marijuana Selling at night
+
+```{r, fig.width=10,fig.height=11}
+marijuana<-ggmap(md_stamen) +
+    geom_point(data=crime_marijuana, mapping = aes(x = longitude, y = latitude, color=crime_name3))+labs(title="Heat Map for Marijuana Crimes")+theme(plot.title = element_text(hjust = 0.5))
+marijuana
+```
+
+## Creating a heat map for only Burgulary crimes at night
+
+```{r, fig.width=10,fig.height=11}
+burglary<-ggmap(md_stamen) +
+    geom_point(data=crime_burglarynight, mapping = aes(x = longitude, y = latitude, color=crime_name3),alpha=0.5)+labs(title="Heat Map for Burglary Crimes")+theme(plot.title = element_text(hjust = 0.5))
+burglary
+```
+
+
+
+#Tableau Visualizations
+https://public.tableau.com/profile/jeffrey.hou#!/vizhome/Crime_15724130808130/Sheet2
