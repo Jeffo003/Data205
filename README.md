@@ -8,6 +8,9 @@ Dataset 3: https://mpdc.dc.gov/publication/marijuana-arrest-data
 Dataset 4: https://opendata.maryland.gov/Public-Safety/Violent-Crime-Property-Crime-Statewide-Totals-1975/hyg2-hy98
 
 Crimefinal: Using the data montgomery dataset, cleaning, EDA, Statistical Anaylsis 
+
 CrimeMDfinal: Using the MD dataset, cleaning, EDA, Statistical Anaylsis 
+
 CrimeDenverfinal: Using the Denver dataset, cleaning, EDA, Statistical Anaylsis 
+
 CrimeDCfinal: Using the DC dataset, cleaning, EDA, Statistical Anaylsis 
