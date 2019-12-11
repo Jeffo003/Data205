@@ -5,7 +5,7 @@ My project focused on 4 different datasets. I looked at crime and drug use in 3 
 
 Dataset 1: https://data.montgomerycountymd.gov/Public-Safety/Crime/icn6-v9z3
 
-Dataset 2: https://data.world/denver/marijuana-related-crime
+Dataset 2: https://data.world/stoltzmaniac/raw-crime-data-for-denver-colorado
 
 Dataset 3: https://mpdc.dc.gov/publication/marijuana-arrest-data
 
