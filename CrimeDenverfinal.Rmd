@@ -1,0 +1,234 @@
+---
+title: "Crime Denver"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Reading in the data
+The first thing to do is to read in the data from the csv file. 
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(ggrepel)
+library(leaflet)
+library(janitor)
+library(MASS)
+library(scales)
+library(ggmap)
+library(tidyverse)
+setwd("C:/Users/Jeffo/Downloads")
+crimedenver<- read.csv('crimedenver.csv')
+crimedenver <- crimedenver%>%
+  clean_names()
+```
+## Cleaning the data
+```{r}
+proper_case <- function(x) {
+  return (gsub("\\b([A-Z])([A-Z]+)", "\\U\\1\\L\\2" , x, perl=TRUE))
+
+}
+#rename columns
+colnames(crimedenver)[13] <- "longitude"
+colnames(crimedenver)[14] <- "latitude"
+
+#convert titles into all lower case for easier reading
+
+proper_case <- function(x) {
+  return (gsub("\\b([A-Z])([A-Z]+)", "\\U\\1\\L\\2" , x, perl=TRUE))}
+
+crimedenver<- crimedenver%>% mutate(
+                        incident_address= proper_case(incident_address)
+)
+```
+## Subsetting denver data for only crime data
+```{r}
+onlycrime<-subset(crimedenver, is_traffic %in% c("0"), drop = TRUE) 
+
+```
+
+## Using mutate, create separate variables for year month date
+```{r}
+library(lubridate)
+crimedenver<-crimedenver%>%
+  mutate(
+    incident_date=mdy_hms(first_occurrence_date), 
+     incidentdate=as.Date(incident_date),
+    incident_hour=hour(incident_date),
+    incident_minute=minute(incident_date),
+    incident_month=month(incident_date),
+    incident_year=year(incident_date),
+    atnight=incident_hour>6 & incident_hour<18,
+    burglary=offense_category_id=='burglary'
+  
+  )
+denveratnight<-filter(crimedenver, atnight==TRUE)
+denverburglary<-filter(crimedenver, burglary==TRUE)
+denvernightburglary<-filter(denveratnight, burglary==TRUE)
+```
+## Exploratory Data Analysis
+
+The data file contains 26 variables and 460911 rows. These variables include the city of the crime, the time of the crime, as well description of the crime. Most of the variables are factors, except for my created variables, which are logical variables. 
+```{r}
+str(crimedenver)
+```
+## Looking at different offenses in the dataset
+In this dataset, there are 15 unique offenses are represented in the datset. 
+```{r}
+unique(crimedenver$offense_category_id)
+```
+## Looking at Missing values
+As you can see, there no missing time data for this dataset. That is ideal as it will make my data anaylsis as accurate as possible. 
+```{r}
+sum(is.na(crimedenver$offense_category_id))
+```
+## Tally by crime type
+As we can see, the top category of crime in Denver is traffic accidents. Since we are focusing on burglary, we can see that there are 26606 arrests.  
+```{r}
+table(crimedenver$offense_category_id)[order(table(crimedenver$offense_category_id), decreasing = T)] # Order decreasing
+
+```
+## Looking at Frequency of Months for Denver Arrests
+Next I have a look at the frequency of crimes by month. 
+Looking at our results, you can see that July and August are the most popular months for crimes. 
+```{r}
+group_by(.data = crimedenver, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+
+
+
+
+## Looking at Frequency of Months for Burglary Arrests
+Next I have a look at the frequency of burglary crimes by month. 
+Looking at our results, you can see that August is the most popular month for burglary crimes. 
+```{r}
+group_by(.data = denverburglary, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+
+## Bar Graph of arrests by Month
+We can see that there is steady increase of arrests from March all the way to September with its peak at August. 
+```{r}
+ggplot(data=crimedenver, aes(x=incident_month))+geom_bar(aes(fill=atnight))+labs(title="Arrests in Denver by Month")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+## Bar Graph of  Burglary arrests by Month
+The burglary arrests follow the same pattern as normal arrests.  
+```{r}
+ggplot(data=denverburglary, aes(x=incident_month))+geom_bar(aes(fill=atnight))+labs(title="Burglary Arrests in Denver by Month")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+## Daytime vs Nighttime Arrests in Denver
+As we can see, there are more Nighttime arrests in Denver compared to the daytime.
+
+```{r}
+P<-ggplot(data=subset(crimedenver, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+scale_x_discrete(labels=c("FALSE" = "Daytime","TRUE" = "Nighttime"))+labs(title="Denver Crimminal Arrests in Daytime vs Nightime",x="Time of the day")+ theme(plot.title = element_text(hjust = 0.5))+theme(legend.position = "none")
+```
+
+## Daytime vs Nighttime Burglary Arrests in Denver
+Again , there are more Nighttime burglary arrests in Denver compared to the daytime.
+```{r}
+P<-ggplot(data=subset(denverburglary, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+scale_x_discrete(labels=c("FALSE" = "Daytime","TRUE" = "Nighttime"))+labs(title="Burglary Arrests in Daytime vs Nightime",x="Time of the day")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+## Setting bounds for mapping
+
+```{r}
+
+denver_bb <- c(left = -105.08,
+           bottom = 39.6,
+           right = -104.6,
+           top = 39.9)
+
+denver_stamen <- get_stamenmap(bbox = denver_bb,
+                               zoom = 11)
+
+```
+
+## Heat map for all crimes in Denver
+```{r}
+#using ggmaps, create a map with the crimedenver data
+ggmap(denver_stamen)+ geom_point(data=denveratnight, mapping = aes(x = longitude,
+                                                         y = latitude, color=offense_category_id))+labs(title="Heat Map for All Crimes in Denver")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+## Heat map for all burglary crimes in Denver
+```{r}
+#using ggmaps, create a map with the crimedenver data
+ggmap(denver_stamen)+ geom_point(data=denverburglary, mapping = aes(x = longitude,
+                                                         y = latitude, color=offense_category_id))+labs(title="Heat Map for All Burglary Crimes in Denver")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+## Heat map for all nightime burglary crimes in Denver
+```{r}
+#using ggmaps, create a map with the crimedenver data
+ggmap(denver_stamen)+ geom_point(data=denvernightburglary, mapping = aes(x = longitude,
+                                                         y = latitude, color=offense_category_id))+labs(title="Heat Map for All Nightime Burglary Crimes in Denver")+theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+## Denver Arrests by District
+District 3 has the most amount of arrests in Denver. 
+```{r}
+
+
+ggplot(data=crimedenver,aes(x=reorder(district_id,district_id,function(x)-length(x))))+geom_bar()+labs(title="Denver arrests by District", x="District #")+ theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+## Heat Map for Denver Crimes 
+
+```{r}
+leaflet(crimedenver) %>% addProviderTiles(providers$CartoDB.Positron) %>%
+  addWebGLHeatmap(lng=~longitude, lat=~latitude, size = 200)
+```
+
+```{r}
+df=crimedenver%>%
+  count(incidentdate)%>%
+  rename(ds=incidentdate, y=n) %>%
+  filter(!is.na(ds))
+m=prophet(df)
+future <- make_future_dataframe(m, periods = 365)
+forecast <- predict(m, future)
+tail(forecast[c("ds", "yhat", "yhat_lower", "yhat_upper")])
+plot(m, forecast)
+
+```
+
+
+
+```{r}
+prophet_plot_components(m, forecast)
+```
+
+
+```{r}
+dyplot.prophet(m, forecast)
+```
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,286 @@
+---
+title: "Crime DC"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Reading in the data
+The first thing to do is to read in the data from the csv file. 
+
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(DT)
+library(ggrepel)
+library(leaflet)
+library(leaflet.extras)
+library(janitor)
+library(MASS)
+library(scales)
+library(ggmap)
+library(tidyverse)
+library(lubridate)
+setwd("C:/Users/Jeffo/Downloads")
+crimedc<- read.csv('crimedc.csv') #read in from csv file
+```
+
+# Cleaning the data
+
+```{r}
+crimedc <- crimedc%>%
+  clean_names()
+crimedc$ccn <- NULL 
+```
+
+
+## Convert all titles into lowercase for easier reading
+```{r}
+proper_case <- function(x) {
+  return (gsub("\\b([A-Z])([A-Z]+)", "\\U\\1\\L\\2" , x, perl=TRUE))
+}
+ crimedc<- crimedc%>% mutate(block = proper_case(block))
+
+```
+
+## Using mutate and lubricate to separate date and time
+```{r}
+ 
+
+ #using the mutate function, create separate variables for each month, year and day
+  crimedc<-crimedc%>%
+    mutate(
+      incident_hour=hour(ymd_hms(report_dat)),
+      incidentdate=as.Date(report_dat),
+      incident_month=month(ymd_hms(report_dat)),
+     incident_year=year(ymd_hms(report_dat)),
+      atnight=incident_hour>6 & incident_hour<18,
+     burglary=offense==( 'BURGLARY')
+    )
+```
+
+## Create filter for just nighttime arrests
+```{r}
+dcburglary<-filter(crimedc, burglary==TRUE)
+dcatnight<-filter(crimedc, atnight==TRUE)
+nightburglary<-filter(dcatnight, burglary==TRUE)
+```
+
+#  Exploratory Data Anaylsis
+There are 29 different variables in this dataset, as well as 26264 different observations. Most of the data variables are factor, and some are numerical variables. 
+```{r}
+str(crimedc)
+```
+
+## Looking at different Offenses in the dataset
+In this dataset, there are 9 unique offenses that are represented in the datset.Unfortunately, drugs is not represented in this dataset, so we will focus on burglary. 
+
+```{r}
+unique(crimedc$offense)
+```
+
+## Looking at Missing values
+As you can see, there are no missing offense observations, which will make this dataset as accurate as possible. 
+
+```{r}
+sum(is.na(crimedc$offense))
+```
+
+## Tally by Offense
+
+The crime I will mainly be focusing on in this dataset is burglary. As we can see, there are 1015 different observations for Burglary arrests. 
+```{r}
+table(crimedc$offense)[order(table(crimedc$offense), decreasing = T)] # Order decreasing
+
+```
+
+## Looking at Frequency of Months
+Next I have a look at the frequency of crimes by month. 
+Looking at our results, you can see that the most popular months for dc crimes are August and September. 
+
+```{r}
+group_by(.data = crimedc, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+
+## Looking at Frequency of Months for Burglary
+Next I have a look at the frequency of  burglary crimes by month. 
+Looking at our results, you can see that the most popular months for dc burglary crimes are May and Janauary. Surprsingly, August is still in the top 3.Something interesting to note is that November and December there is no data. 
+
+```{r}
+group_by(.data = dcburglary, incident_month) %>%
+filter(!is.na(incident_month))%>%
+    summarise(count = n()) %>%
+    arrange(desc(count))
+```
+
+
+# Visualizations
+
+## DC arrests by ward
+```{r}
+ggplot(data=crimedc,aes(x=reorder(ward,ward,function(x)-length(x))))+geom_bar()+labs(title="DC arrests by Ward", x="Ward #")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+## Arrests in DC by Month
+For DC, there is a steady increase in arrests from Feburary till September, with its peak at August. 
+```{r}
+ggplot(data=crimedc, aes(x=incident_month))+geom_bar(aes(fill=atnight))+labs(title="Arrests in DC by Month")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+## Burglary Arrests in DC by Month
+For DC, there is a steady increase in arrests from Feburary till September, with its peak at August. 
+```{r}
+ggplot(data=dcburglary, aes(x=incident_month))+geom_bar(aes(fill=atnight))+labs(title=" Burglary Arrests in DC by Month")+ theme(plot.title = element_text(hjust = 0.5))+scale_x_discrete(name ="month", 
+                    limits=c("1","2","3","4","5","6","7","8","9","10","11", "12"))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))
+```
+
+## DC arrests at night vs daytime
+
+DC has more arrests in the daytime vs the nightime. 
+
+```{r}
+P<-ggplot(data=subset(crimedc, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+scale_x_discrete(labels=c("FALSE" = "Daytime","TRUE" = "Nighttime"))+labs(title="DC Arrests in Daytime vs Nightime")+ theme(plot.title = element_text(hjust = 0.5))+scale_fill_discrete(name = "Time of Day", labels = c("Daytime", "Nightime"))+theme(legend.position = "none")
+```
+
+
+## DC burglary arrests daytime vs nightime
+An interesting observation is that DC burglaries happen more at night, compared to MD burglaries that happen mostly in the daytime. 
+
+```{r}
+P<-ggplot(data=subset(dcburglary, !is.na(atnight)), aes(x=atnight)) + geom_bar(aes(fill=atnight))
+P+scale_x_discrete(labels=c("FALSE" = "Daytime","TRUE" = "Nighttime"))+labs(title="DC Burglary Arrests in Daytime vs Nightime", x="Time of the day")+ theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+## Create nightime map for DC
+```{r}
+#using the stamen mapping, create boundaries for the map
+dc_bb <- c(left = -77.2413345,
+           bottom = 38.8171923,
+           right = -76.868707,
+           top = 39.1)
+#get map outline
+dc_stamen <- get_stamenmap(bbox = dc_bb,
+                           zoom = 10)
+#using ggmaps, create a map with the crimedc data
+ggmap(dc_stamen)+ geom_point(data=crimedc, mapping = aes(x = longitude,
+                                                          y = latitude, color=offense))
+```
+
+## Create a map for Buglaries at night in DC
+```{r}
+ggmap(dc_stamen)+ geom_point(data=nightburglary, mapping = aes(x = longitude,
+                                                          y = latitude, color=offense))
+```
+
+## Create a  heat map for crimes in DC
+
+```{r}
+leaflet(crimedc) %>% addProviderTiles(providers$CartoDB.Positron) %>%
+  addWebGLHeatmap(lng=~longitude, lat=~latitude, size = 200)
+```
+
+#Statistical Data Analysis
+Using the Chisquared test, I look to see if there are any correlation between method and shift.I set signifcance level at 0.05 
+Null hypothesis (H0): the row and the column variables of the contingency table are independent.
+Alternative hypothesis (H1): row and column variables are dependent
+
+```{r}
+r<-table(crimedc$offense, crimedc$shift)
+chisq<- chisq.test(crimedc$offense, crimedc$shift, correct=FALSE)
+chisq
+
+q<-qchisq(c(.025,.975),df=16, lower.tail=FALSE) #95 confidence interval 
+
+```
+## Conclusion 
+based on the fact that the pvalue much smaller than the 0.05  i chose, we can reject the null hypothesis and  conclude that the variables offense and shift are  statistically significantly associated.
+
+
+
+
+#Balloon Plot 
+```{r}
+# 1. convert the data as a table
+dt <- as.table(as.matrix(r))
+# 2. Graph
+balloonplot(t(dt), main ="r", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE,colsrt=60,colmar=5)
+
+chisq$observed
+round(chisq$expected,2)
+round(chisq$residuals, 3)
+
+```
+# Correlation plot
+```{r}
+
+library(corrplot)
+corrplot(chisq$residuals, is.cor = FALSE)
+```
+
+# Chi-squared test for Ward and Shift
+
+```{r}
+r<-table(crimedc$ward, crimedc$shift)
+chisq<- chisq.test(crimedc$ward, crimedc$shift, correct=FALSE)
+chisq
+
+q<-qchisq(c(.025,.975),df=16, lower.tail=FALSE) #95 confidence interval 
+
+```
+#Balloon Plot 
+```{r}
+# 1. convert the data as a table
+dt <- as.table(as.matrix(r))
+# 2. Graph
+balloonplot(t(dt), main ="r", xlab ="", ylab="",
+            label = FALSE, show.margins = FALSE,colsrt=60,colmar=5)
+
+chisq$observed
+round(chisq$expected,2)
+round(chisq$residuals, 3)
+
+```
+# Correlation plot
+```{r}
+
+library(corrplot)
+corrplot(chisq$residuals, is.cor = FALSE)
+```
+# Conclusion
+
+Looking at the correlation plot for the residuals, we can see that there are strong positive association between Evening and Ward 2 and 3.  There is also a strong positive association between Ward 1 and Midnight. There is a strong negative assocation between Ward 3  and Midnight as well as Ward 2 and Day. 
+
+```{r}
+contrib <- 100*chisq$residuals^2/chisq$statistic
+round(contrib, 3)
+corrplot(contrib, is.cor = FALSE)
+```
+```{r}
+df=crimedc%>%
+  count(incidentdate)%>%
+  rename(ds=incidentdate, y=n) %>%
+  filter(!is.na(ds),ds>as.Date("2019-07-01"))
+m=prophet(df)
+future <- make_future_dataframe(m, periods = 365)
+forecast <- predict(m, future)
+tail(forecast[c("ds", "yhat", "yhat_lower", "yhat_upper")])
+plot(m, forecast)
+```
+```{r}
+prophet_plot_components(m, forecast)
+```
+
+```{r}
+dyplot.prophet(m, forecast)
+```
