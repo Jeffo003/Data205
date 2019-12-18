@@ -18,3 +18,7 @@ CrimeMDfinal: Using the MD dataset, cleaning, EDA, Statistical Anaylsis
 CrimeDenverfinal: Using the Denver dataset, cleaning, EDA, Statistical Anaylsis 
 
 CrimeDCfinal: Using the DC dataset, cleaning, EDA, Statistical Anaylsis 
+
+Presentation: Final Presentation done for county offficials
+
+Final Paper: Written paper on my datasets 
